@@ -27,7 +27,7 @@
 #include "fmac_util.h"
 #include <fmac_main.h>
 
-#ifndef CONFIG_NRF70_RADIO_TEST
+#if !defined(CONFIG_NRF70_RADIO_TEST) && !defined(CONFIG_NRF70_OFFLOADED_RAW_TX)
 #ifdef CONFIG_NRF70_STA_MODE
 #include <zephyr/net/wifi_nm.h>
 #include <wifi_mgmt_scan.h>
@@ -39,7 +39,7 @@
 #endif /* CONFIG_NRF70_STA_MODE */
 #include <zephyr/net/conn_mgr_connectivity.h>
 
-#endif /* !CONFIG_NRF70_RADIO_TEST */
+#endif /* !CONFIG_NRF70_RADIO_TEST && !CONFIG_NRF70_OFFLOADED_RAW_TX*/
 
 #define DT_DRV_COMPAT nordic_wlan
 LOG_MODULE_DECLARE(wifi_nrf, CONFIG_WIFI_NRF70_LOG_LEVEL);
@@ -49,7 +49,7 @@ extern const struct nrf_wifi_osal_ops nrf_wifi_os_zep_ops;
 
 /* 3 bytes for addreess, 3 bytes for length */
 #define MAX_PKT_RAM_TX_ALIGN_OVERHEAD 6
-#ifndef CONFIG_NRF70_RADIO_TEST
+#if !defined(CONFIG_NRF70_RADIO_TEST) && !defined(CONFIG_NRF70_OFFLOADED_RAW_TX)
 #ifdef CONFIG_NRF70_DATA_TX
 
 #define MAX_RX_QUEUES 3
@@ -483,8 +483,7 @@ void reg_change_callbk_fn(void *vif_ctx,
 		   sizeof(struct nrf_wifi_event_regulatory_change));
 	fmac_dev_ctx->reg_set_status = true;
 }
-#endif /* !CONFIG_NRF70_RADIO_TEST */
-
+#endif /* !CONFIG_NRF70_RADIO_TEST && !CONFIG_NRF70_OFFLOADED_RAW_TX */
 /* DTS uses 1dBm as the unit for TX power, while the RPU uses 0.25dBm */
 #define MAX_TX_PWR(label) DT_PROP(DT_NODELABEL(nrf70), label) * 4
 
@@ -637,6 +636,17 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_add_zep(struct nrf_wifi_drv_priv_zep *drv
 					&tx_pwr_ctrl_params,
 					&tx_pwr_ceil_params,
 					&board_params);
+#elif CONFIG_NRF70_OFFLOADED_RAW_TX
+	status = nrf_wifi_fmac_dev_init_offloaded_raw_tx(rpu_ctx_zep->rpu_ctx,
+#ifdef CONFIG_NRF_WIFI_LOW_POWER
+					sleep_type,
+#endif /* CONFIG_NRF_WIFI_LOW_POWER */
+					NRF_WIFI_DEF_PHY_CALIB,
+					op_band,
+					IS_ENABLED(CONFIG_NRF_WIFI_BEAMFORMING),
+					&tx_pwr_ctrl_params,
+					&tx_pwr_ceil_params,
+					&board_params);
 #else
 	status = nrf_wifi_fmac_dev_init(rpu_ctx_zep->rpu_ctx,
 #ifdef CONFIG_NRF_WIFI_LOW_POWER
@@ -663,6 +673,8 @@ err:
 	if (rpu_ctx) {
 #ifdef CONFIG_NRF70_RADIO_TEST
 		nrf_wifi_fmac_dev_rem_rt(rpu_ctx);
+#elif CONFIG_NRF70_OFFLOADED_RAW_TX
+		nrf_wifi_fmac_dev_rem_offloaded_raw_tx(rpu_ctx);
 #else
 		nrf_wifi_fmac_dev_rem(rpu_ctx);
 #endif /* CONFIG_NRF70_RADIO_TEST */
@@ -679,6 +691,9 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_rem_zep(struct nrf_wifi_drv_priv_zep *drv
 #ifdef CONFIG_NRF70_RADIO_TEST
 	nrf_wifi_fmac_dev_deinit_rt(rpu_ctx_zep->rpu_ctx);
 	nrf_wifi_fmac_dev_rem_rt(rpu_ctx_zep->rpu_ctx);
+#elif CONFIG_NRF70_OFFLOADED_RAW_TX
+	nrf_wifi_fmac_dev_deinit_offloaded_raw_tx(rpu_ctx_zep->rpu_ctx);
+	nrf_wifi_fmac_dev_rem_offloaded_raw_tx(rpu_ctx_zep->rpu_ctx);
 #else
 	nrf_wifi_fmac_dev_deinit(rpu_ctx_zep->rpu_ctx);
 	nrf_wifi_fmac_dev_rem(rpu_ctx_zep->rpu_ctx);
@@ -697,7 +712,7 @@ enum nrf_wifi_status nrf_wifi_fmac_dev_rem_zep(struct nrf_wifi_drv_priv_zep *drv
 
 static int nrf_wifi_drv_main_zep(const struct device *dev)
 {
-#ifndef CONFIG_NRF70_RADIO_TEST
+#if !defined(CONFIG_NRF70_RADIO_TEST) && !defined(CONFIG_NRF70_OFFLOADED_RAW_TX)
 	struct nrf_wifi_fmac_callbk_fns callbk_fns = { 0 };
 	struct nrf_wifi_data_config_params data_config = { 0 };
 	struct rx_buf_pool_params rx_buf_pools[MAX_NUM_OF_RX_QUEUES];
@@ -772,7 +787,7 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 	rpu_drv_priv_zep.fmac_priv = nrf_wifi_fmac_init(&data_config,
 							rx_buf_pools,
 							&callbk_fns);
-#else /* !CONFIG_NRF70_RADIO_TEST */
+#elif CONFIG_NRF70_RADIO_TEST
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 
 	/* The OSAL layer needs to be initialized before any other initialization
@@ -781,7 +796,16 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 	nrf_wifi_osal_init(&nrf_wifi_os_zep_ops);
 
 	rpu_drv_priv_zep.fmac_priv = nrf_wifi_fmac_init_rt();
-#endif /* CONFIG_NRF70_RADIO_TEST */
+#elif CONFIG_NRF70_OFFLOADED_RAW_TX
+	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
+
+	/* The OSAL layer needs to be initialized before any other initialization
+	 * so that other layers (like FW IF,HW IF etc) have access to OS ops
+	 */
+	nrf_wifi_osal_init(&nrf_wifi_os_zep_ops);
+
+	rpu_drv_priv_zep.fmac_priv = nrf_wifi_fmac_init_offloaded_raw_tx();
+#endif /* CONFIG_NRF70_RADIO_TEST && !CONFIG_NRF70_OFFLOADED_RAW_TX */
 
 	if (rpu_drv_priv_zep.fmac_priv == NULL) {
 		LOG_ERR("%s: nrf_wifi_fmac_init failed",
@@ -811,6 +835,12 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 		LOG_ERR("%s: nrf_wifi_fmac_dev_add_zep failed", __func__);
 		goto fmac_deinit;
 	}
+#elif CONFIG_NRF70_OFFLOADED_RAW_TX
+	status = nrf_wifi_fmac_dev_add_zep(&rpu_drv_priv_zep);
+	if (status != NRF_WIFI_STATUS_SUCCESS) {
+		LOG_ERR("%s: nrf_wifi_fmac_dev_add_zep failed", __func__);
+		goto fmac_offload_raw_deinit;
+	}
 #else
 	k_work_init_delayable(&vif_ctx_zep->scan_timeout_work,
 			      nrf_wifi_scan_timeout_work);
@@ -822,11 +852,16 @@ fmac_deinit:
 	nrf_wifi_fmac_deinit_rt(rpu_drv_priv_zep.fmac_priv);
 	nrf_wifi_osal_deinit();
 #endif /* CONFIG_NRF70_RADIO_TEST */
+#ifdef CONFIG_NRF70_OFFLOADED_RAW_TX
+fmac_offload_raw_deinit:
+	nrf_wifi_fmac_deinit_offloaded_raw_tx(rpu_drv_priv_zep.fmac_priv);
+	nrf_wifi_osal_deinit();
+#endif /* CONFIG_NRF70_OFFLOADED_RAW_TX */
 err:
 	return -1;
 }
 
-#ifndef CONFIG_NRF70_RADIO_TEST
+#if !defined(CONFIG_NRF70_RADIO_TEST) && !defined(CONFIG_NRF70_OFFLOADED_RAW_TX)
 #ifdef CONFIG_NET_L2_WIFI_MGMT
 static struct wifi_mgmt_ops nrf_wifi_mgmt_ops = {
 	.scan = nrf_wifi_disp_scan_zep,
@@ -887,7 +922,7 @@ static struct zep_wpa_supp_dev_ops wpa_supp_ops = {
 #endif /* CONFIG_NRF70_AP_MODE */
 };
 #endif /* CONFIG_NRF70_STA_MODE */
-#endif /* !CONFIG_NRF70_RADIO_TEST */
+#endif /* !CONFIG_NRF70_RADIO_TEST && !CONFIG_NRF70_OFFLOADED_RAW_TX*/
 
 
 #ifdef CONFIG_NET_L2_ETHERNET
@@ -930,11 +965,11 @@ ETH_NET_DEVICE_DT_INST_DEFINE(0,
 DEVICE_DT_INST_DEFINE(0,
 	      nrf_wifi_drv_main_zep, /* init_fn */
 	      NULL, /* pm_action_cb */
-#ifndef CONFIG_NRF70_RADIO_TEST
+#if !defined(CONFIG_NRF70_RADIO_TEST) && !defined(CONFIG_NRF70_OFFLOADED_RAW_TX)
 	      &rpu_drv_priv_zep, /* data */
-#else /* !CONFIG_NRF70_RADIO_TEST */
+#else /* CONFIG_NRF70_RADIO_TEST */
 	      NULL,
-#endif /* CONFIG_NRF70_RADIO_TEST */
+#endif /* !CONFIG_NRF70_RADIO_TEST && !CONFIG_NRF70_OFFLOADED_RAW_TX*/
 	      NULL, /* cfg */
 	      POST_KERNEL,
 	      CONFIG_WIFI_INIT_PRIORITY, /* prio */
