@@ -809,4 +809,17 @@ config NRF_WIFI_COEX_DISABLE_PRIORITY_WINDOW_FOR_SCAN
 	help
 	  Enable this configuration to disable priority window for scan
 	  in the case of coexistence with Short Range radio.
+
+config NRF_WIFI_MAX_PS_POLL_FAIL_CNT
+	int "Maximum number of PS-Poll Failures"
+	default 10
+	range 10 4294967295
+	help
+	  Maximum number of PS-Poll failures before entering qos null-based power save.
+
+config NRF_WIFI_STBC_HT
+	bool "Enable STBC for HT"
+	default y
+	help
+	  Enable STBC (Space-Time Block Coding) for HT mode.
 endif # WIFI_NRF70
