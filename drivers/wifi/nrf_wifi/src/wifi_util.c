@@ -938,7 +938,22 @@ static int nrf_wifi_util_rpu_recovery_info(const struct shell *sh,
 	}
 
 	fmac_dev_ctx = ctx->rpu_ctx;
+	if (!fmac_dev_ctx) {
+		shell_fprintf(sh,
+			      SHELL_ERROR,
+			      "FMAC context not initialized\n");
+		ret = -ENOEXEC;
+		goto unlock;
+	}
+
 	hal_dev_ctx = fmac_dev_ctx->hal_dev_ctx;
+	if (!hal_dev_ctx) {
+		shell_fprintf(sh,
+			      SHELL_ERROR,
+			      "HAL context not initialized\n");
+		ret = -ENOEXEC;
+		goto unlock;
+	}
 
 	shell_fprintf(sh,
 		      SHELL_INFO,
@@ -950,8 +965,8 @@ static int nrf_wifi_util_rpu_recovery_info(const struct shell *sh,
 		      "current time: %lu milliseconds\n"
 		      "rpu_recovery_success: %d\n"
 		      "rpu_recovery_failure: %d\n\n",
-		      hal_dev_ctx->wdt_irq_received,
-		      hal_dev_ctx->wdt_irq_ignored,
+		      ctx->wdt_irq_received,
+		      ctx->wdt_irq_ignored,
 		      hal_dev_ctx->last_wakeup_now_asserted_time_ms,
 		      hal_dev_ctx->last_wakeup_now_deasserted_time_ms,
 		      hal_dev_ctx->last_rpu_sleep_opp_time_ms,
