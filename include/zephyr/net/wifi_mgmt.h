@@ -137,6 +137,10 @@ enum net_request_wifi_cmd {
 	NET_REQUEST_WIFI_CMD_AP_WPS_CONFIG,
 	/** Configure BSS maximum idle period */
 	NET_REQUEST_WIFI_CMD_BSS_MAX_IDLE_PERIOD,
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+	/** P2P operations */
+	NET_REQUEST_WIFI_CMD_P2P,
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 	/** @cond INTERNAL_HIDDEN */
 	NET_REQUEST_WIFI_CMD_MAX
 	/** @endcond */
@@ -332,6 +336,14 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_NEIGHBOR_REP_COMPLETE);
 
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD);
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+
+#define NET_REQUEST_WIFI_P2P					\
+	(NET_WIFI_BASE | NET_REQUEST_WIFI_CMD_P2P)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_WIFI_P2P);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
+
 /** @cond INTERNAL_HIDDEN */
 
 enum {
@@ -352,6 +364,9 @@ enum {
 	NET_EVENT_WIFI_CMD_AP_STA_CONNECTED_VAL,
 	NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED_VAL,
 	NET_EVENT_WIFI_CMD_SUPPLICANT_VAL,
+	NET_EVENT_WIFI_CMD_P2P_DEVICE_FOUND_VAL,
+	NET_EVENT_WIFI_CMD_P2P_GROUP_STARTED_VAL,
+	NET_EVENT_WIFI_CMD_P2P_GROUP_REMOVED_VAL,
 
 	NET_EVENT_WIFI_CMD_MAX,
 };
@@ -399,6 +414,12 @@ enum net_event_wifi_cmd {
 	NET_MGMT_CMD(NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED),
 	/** Supplicant specific event */
 	NET_MGMT_CMD(NET_EVENT_WIFI_CMD_SUPPLICANT),
+	/** P2P device found */
+	NET_MGMT_CMD(NET_EVENT_WIFI_CMD_P2P_DEVICE_FOUND),
+	/** P2P group started */
+	NET_MGMT_CMD(NET_EVENT_WIFI_CMD_P2P_GROUP_STARTED),
+	/** P2P group removed */
+	NET_MGMT_CMD(NET_EVENT_WIFI_CMD_P2P_GROUP_REMOVED),
 };
 
 /** Event emitted for Wi-Fi scan result */
@@ -460,6 +481,20 @@ enum net_event_wifi_cmd {
 /** Event emitted Wi-Fi station is disconnected from AP */
 #define NET_EVENT_WIFI_AP_STA_DISCONNECTED			\
 	(NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_AP_STA_DISCONNECTED)
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+/** Event emitted when P2P device is found */
+#define NET_EVENT_WIFI_P2P_DEVICE_FOUND				\
+	(NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_P2P_DEVICE_FOUND)
+
+/** Event emitted when P2P group is started */
+#define NET_EVENT_WIFI_P2P_GROUP_STARTED			\
+	(NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_P2P_GROUP_STARTED)
+
+/** Event emitted when P2P group is removed */
+#define NET_EVENT_WIFI_P2P_GROUP_REMOVED			\
+	(NET_WIFI_EVENT | NET_EVENT_WIFI_CMD_P2P_GROUP_REMOVED)
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 
 /** @brief Wi-Fi version */
 struct wifi_version {
@@ -1380,6 +1415,99 @@ struct wifi_wps_config_params {
 	char pin[WIFI_WPS_PIN_MAX_LEN + 1];
 };
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+/** Max length for P2P device name */
+#define WIFI_P2P_DEVICE_NAME_MAX_LEN 32
+/** Max length for P2P interface name */
+#define WIFI_P2P_IFACE_NAME_MAX_LEN 16
+
+/** Wi-Fi P2P operations */
+enum wifi_p2p_op {
+	/** Start P2P find (discovery) */
+	WIFI_P2P_OP_FIND = 0,
+	/** Stop P2P find */
+	WIFI_P2P_OP_STOP_FIND,
+	/** Connect to P2P peer */
+	WIFI_P2P_OP_CONNECT,
+	/** Disconnect from P2P group */
+	WIFI_P2P_OP_DISCONNECT,
+	/** Listen for P2P connections */
+	WIFI_P2P_OP_LISTEN,
+	/** Remove P2P group */
+	WIFI_P2P_OP_GROUP_REMOVE,
+	/** Add P2P group */
+	WIFI_P2P_OP_GROUP_ADD,
+	/** List P2P peers */
+	WIFI_P2P_OP_PEERS,
+	/** Flush P2P state */
+	WIFI_P2P_OP_FLUSH,
+	/** Cancel P2P operation */
+	WIFI_P2P_OP_CANCEL,
+};
+
+/** Wi-Fi P2P device info (for events) */
+struct wifi_p2p_device_info {
+	/** MAC address */
+	uint8_t mac[WIFI_MAC_ADDR_LEN];
+	/** Device name */
+	char device_name[WIFI_P2P_DEVICE_NAME_MAX_LEN + 1];
+};
+
+/** Wi-Fi P2P group info (for events) */
+struct wifi_p2p_group_info {
+	/** Interface name */
+	char ifname[WIFI_P2P_IFACE_NAME_MAX_LEN + 1];
+	/** SSID */
+	char ssid[WIFI_SSID_MAX_LEN + 1];
+	/** Is group owner */
+	bool is_go;
+};
+
+/** Wi-Fi P2P find parameters */
+struct wifi_p2p_find_params {
+	/** Timeout in seconds (0 = indefinite) */
+	uint16_t timeout;
+	/** Scan type: 0 = normal, 1 = social channels only */
+	uint8_t type;
+};
+
+/** Wi-Fi P2P connect parameters */
+struct wifi_p2p_connect_params {
+	/** Peer MAC address */
+	uint8_t peer_addr[WIFI_MAC_ADDR_LEN];
+	/** WPS method (reuses wifi_wps_op) */
+	enum wifi_wps_op wps_method;
+	/** PIN (if wps_method is WIFI_WPS_PIN_SET or WIFI_WPS_PIN_GET) */
+	char pin[WIFI_WPS_PIN_MAX_LEN + 1];
+};
+
+/** Wi-Fi P2P listen parameters */
+struct wifi_p2p_listen_params {
+	/** Listen duration in milliseconds */
+	uint16_t duration;
+};
+
+/** Wi-Fi P2P params for various operations */
+struct wifi_p2p_params {
+	/** Operation type */
+	enum wifi_p2p_op oper;
+	union {
+		/** P2P find parameters */
+		struct wifi_p2p_find_params find;
+		/** P2P connect parameters */
+		struct wifi_p2p_connect_params connect;
+		/** P2P listen parameters */
+		struct wifi_p2p_listen_params listen;
+		/** P2P device info (for events) */
+		struct wifi_p2p_device_info device;
+		/** P2P group info (for events) */
+		struct wifi_p2p_group_info group;
+		/** Interface name for group operations */
+		char ifname[WIFI_P2P_IFACE_NAME_MAX_LEN + 1];
+	};
+};
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
+
 /** Wi-Fi AP status
  */
 enum wifi_sap_iface_state {
@@ -1732,6 +1860,16 @@ struct wifi_mgmt_ops {
 	 */
 	int (*set_bss_max_idle_period)(const struct device *dev,
 			unsigned short bss_max_idle_period);
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+	/** P2P operations (find, connect, etc.)
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params P2P operation parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*p2p)(const struct device *dev, struct wifi_p2p_params *params);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 };
 
 /** Wi-Fi management offload API */
@@ -1862,6 +2000,32 @@ void wifi_mgmt_raise_ap_sta_connected_event(struct net_if *iface,
  */
 void wifi_mgmt_raise_ap_sta_disconnected_event(struct net_if *iface,
 		struct wifi_ap_sta_info *sta_info);
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+/** Wi-Fi management P2P device found event
+ *
+ * @param iface Network interface
+ * @param p2p_params P2P device information
+ */
+void wifi_mgmt_raise_p2p_device_found_event(struct net_if *iface,
+		struct wifi_p2p_params *p2p_params);
+
+/** Wi-Fi management P2P group started event
+ *
+ * @param iface Network interface
+ * @param p2p_params P2P group information
+ */
+void wifi_mgmt_raise_p2p_group_started_event(struct net_if *iface,
+		struct wifi_p2p_params *p2p_params);
+
+/** Wi-Fi management P2P group removed event
+ *
+ * @param iface Network interface
+ * @param p2p_params P2P group information
+ */
+void wifi_mgmt_raise_p2p_group_removed_event(struct net_if *iface,
+		struct wifi_p2p_params *p2p_params);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 
 /**
  * @}

@@ -1450,6 +1450,28 @@ static int wifi_set_bss_max_idle_period(uint64_t mgmt_request, struct net_if *if
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_BSS_MAX_IDLE_PERIOD,
 				  wifi_set_bss_max_idle_period);
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+static int wifi_p2p(uint64_t mgmt_request, struct net_if *iface,
+		    void *data, size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_api(iface);
+	struct wifi_p2p_params *params = data;
+
+	if (wifi_mgmt_api == NULL || wifi_mgmt_api->p2p == NULL) {
+		return -ENOTSUP;
+	}
+
+	if (!data || len != sizeof(*params)) {
+		return -EINVAL;
+	}
+
+	return wifi_mgmt_api->p2p(dev, params);
+}
+
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_P2P, wifi_p2p);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
+
 #ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS
 void wifi_mgmt_raise_raw_scan_result_event(struct net_if *iface,
 					   struct wifi_raw_scan_result *raw_scan_result)
@@ -1518,6 +1540,32 @@ void wifi_mgmt_raise_ap_sta_disconnected_event(struct net_if *iface,
 					iface, sta_info,
 					sizeof(struct wifi_ap_sta_info));
 }
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+void wifi_mgmt_raise_p2p_device_found_event(struct net_if *iface,
+					    struct wifi_p2p_params *p2p_params)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_P2P_DEVICE_FOUND,
+					iface, p2p_params,
+					sizeof(struct wifi_p2p_params));
+}
+
+void wifi_mgmt_raise_p2p_group_started_event(struct net_if *iface,
+					     struct wifi_p2p_params *p2p_params)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_P2P_GROUP_STARTED,
+					iface, p2p_params,
+					sizeof(struct wifi_p2p_params));
+}
+
+void wifi_mgmt_raise_p2p_group_removed_event(struct net_if *iface,
+					     struct wifi_p2p_params *p2p_params)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_P2P_GROUP_REMOVED,
+					iface, p2p_params,
+					sizeof(struct wifi_p2p_params));
+}
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 
 #ifdef CONFIG_WIFI_CREDENTIALS_CONNECT_STORED
 
