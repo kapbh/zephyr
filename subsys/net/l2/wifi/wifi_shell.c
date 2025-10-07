@@ -3516,6 +3516,248 @@ static int cmd_wifi_dpp_reconfig(const struct shell *sh, size_t argc, char *argv
 }
 
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+static int cmd_wifi_p2p_find(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+	int timeout = 0;
+	int err = 0;
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_FIND;
+
+	if (argc >= 2) {
+		timeout = shell_strtol(argv[1], 10, &err);
+		if (err) {
+			PR_ERROR("Invalid timeout value\n");
+			return -EINVAL;
+		}
+	}
+
+	params.find.timeout = (uint16_t)timeout;
+	params.find.type = 0;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P find failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P find started\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_stop_find(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_STOP_FIND;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P stop find failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P find stopped\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_listen(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+	int duration = 0;
+	int err = 0;
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_LISTEN;
+
+	if (argc >= 2) {
+		duration = shell_strtol(argv[1], 10, &err);
+		if (err) {
+			PR_ERROR("Invalid duration value\n");
+			return -EINVAL;
+		}
+	}
+
+	params.listen.duration = (uint16_t)duration;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P listen failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P listen started (duration: %d ms)\n", duration);
+	return 0;
+}
+
+static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	if (argc < 3) {
+		PR_ERROR("Usage: wifi p2p_connect <peer_addr> <pbc|pin>\n");
+		return -EINVAL;
+	}
+
+	params.oper = WIFI_P2P_OP_CONNECT;
+
+	/* Parse peer MAC address */
+	if (net_bytes_from_str(params.connect.peer_addr, WIFI_MAC_ADDR_LEN, argv[1]) < 0) {
+		PR_WARNING("Invalid MAC address\n");
+		return -EINVAL;
+	}
+
+	/* Parse WPS method */
+	if (strcmp(argv[2], "pbc") == 0) {
+		params.connect.wps_method = WIFI_WPS_PBC;
+	} else if (strcmp(argv[2], "pin") == 0) {
+		if (argc >= 4) {
+			/* PIN provided - we're entering the peer's PIN */
+			params.connect.wps_method = WIFI_WPS_PIN_SET;
+			strncpy(params.connect.pin, argv[3], WIFI_WPS_PIN_MAX_LEN);
+		} else {
+			/* No PIN provided - we'll display our PIN */
+			params.connect.wps_method = WIFI_WPS_PIN_GET;
+		}
+	} else {
+		PR_ERROR("Invalid WPS method. Use 'pbc' or 'pin'\n");
+		return -EINVAL;
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P connect failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P connect initiated\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_disconnect(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_DISCONNECT;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P disconnect failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P disconnected\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_GROUP_ADD;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P group add failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P group added (as GO)\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_group_remove(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	if (argc < 2) {
+		PR_ERROR("Usage: wifi p2p_group_remove <ifname>\n");
+		return -EINVAL;
+	}
+
+	params.oper = WIFI_P2P_OP_GROUP_REMOVE;
+	strncpy(params.ifname, argv[1], WIFI_P2P_IFACE_NAME_MAX_LEN);
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P group remove failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P group removed\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_peers(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_PEERS;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P peers query failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P peers list requested\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_flush(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_FLUSH;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P flush failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P state flushed\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_cancel(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+
+	params.oper = WIFI_P2P_OP_CANCEL;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P cancel failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P operation cancelled\n");
+	return 0;
+}
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
+
 static int cmd_wifi_pmksa_flush(const struct shell *sh, size_t argc, char *argv[])
 {
 	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
@@ -3852,6 +4094,64 @@ SHELL_SUBCMD_ADD((wifi), dpp, &wifi_cmd_dpp,
 		 NULL,
 		 0, 0);
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP */
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	wifi_cmd_p2p,
+	SHELL_CMD_ARG(find, NULL,
+		      "Start P2P device discovery.\n"
+		      "[timeout] : Discovery timeout in seconds (0 = indefinite)\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_find, 1, 3),
+	SHELL_CMD_ARG(stop_find, NULL,
+		      "Stop P2P device discovery.\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_stop_find, 1, 2),
+	SHELL_CMD_ARG(listen, NULL,
+		      "Listen for P2P connections.\n"
+		      "[duration] : Listen duration in milliseconds (0 = indefinite)\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_listen, 1, 3),
+	SHELL_CMD_ARG(connect, NULL,
+		      "Connect to a P2P peer.\n"
+		      "<peer_addr> : Peer MAC address (xx:xx:xx:xx:xx:xx)\n"
+		      "<pbc|pin> : WPS method (pbc or pin)\n"
+		      "[pin_value] : PIN value (if using PIN method)\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_connect, 3, 5),
+	SHELL_CMD_ARG(disconnect, NULL,
+		      "Disconnect from P2P group.\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_disconnect, 1, 2),
+	SHELL_CMD_ARG(group_add, NULL,
+		      "Create a P2P group (become GO).\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_group_add, 1, 2),
+	SHELL_CMD_ARG(group_remove, NULL,
+		      "Remove a P2P group.\n"
+		      "<ifname> : P2P interface name\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_group_remove, 2, 3),
+	SHELL_CMD_ARG(peers, NULL,
+		      "List discovered P2P peers.\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_peers, 1, 2),
+	SHELL_CMD_ARG(flush, NULL,
+		      "Flush P2P state (peer list, etc.).\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_flush, 1, 2),
+	SHELL_CMD_ARG(cancel, NULL,
+		      "Cancel ongoing P2P operation.\n"
+		      "[-i, --iface=<interface index>] : Interface index.\n",
+		      cmd_wifi_p2p_cancel, 1, 2),
+	SHELL_SUBCMD_SET_END
+);
+
+SHELL_SUBCMD_ADD((wifi), p2p, &wifi_cmd_p2p,
+		 "P2P (Wi-Fi Direct) commands.",
+		 NULL,
+		 0, 0);
+#endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 
 SHELL_SUBCMD_SET_CREATE(wifi_commands, (wifi));
 
